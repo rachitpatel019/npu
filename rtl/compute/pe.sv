@@ -1,6 +1,8 @@
 // Processing Element (PE) for systolic array matrix multiplication.
 // Implements double-buffered weights with pipelined swap control and fully systolic weight propagation.
 
+// * Could split multiply and accumulate operations across 2 clock cycles to improve Fmax.
+
 module pe (
     input logic clk,
     input logic reset,
