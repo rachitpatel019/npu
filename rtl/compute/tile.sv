@@ -7,15 +7,16 @@ module tile (
     input logic enable,
 
     input logic [7:0] activations_in [0:7],
-    input logic [31:0] partial_sums_in [0:7],
+    output logic [7:0] activations_out [0:7],
 
     input logic [7:0] weights [0:7],
+    output logic [7:0] weights_out [0:7],
     input logic weight_write_in,
     input logic weight_swap_in,
-
-    output logic [7:0] activations_out [0:7],
     output logic weight_write_out,
     output logic weight_swap_out,
+
+    input logic [31:0] partial_sums_in [0:7],
     output logic [31:0] partial_sums_out [0:7]
 );
 
@@ -37,6 +38,7 @@ generate
         
         assign activations_out[i] = activation_wire[i][8];
         assign partial_sums_out[i] = partial_sum_wire[8][i];
+        assign weights_out[i] = weight_data_wire[8][i];
 
         if (i == 0) begin
             assign weight_swap_wire[0][0] = weight_swap_in;

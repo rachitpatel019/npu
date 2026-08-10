@@ -22,10 +22,9 @@ module pe (
     output logic weight_swap_out
 );
 
-// Registers to hold weight data for double buffering and pipelined write enable state.
+// Registers to hold weight data for double buffering.
 logic [7:0] weight_active;
 logic [7:0] weight_shadow;
-logic weight_write_reg;
 
 // Pipelined logic for activation forwarding, partial sum accumulation, and double-buffered weight updates.
 always_ff @(posedge clk) begin
@@ -35,7 +34,6 @@ always_ff @(posedge clk) begin
         weight_out <= 8'd0;
         weight_active <= 8'd0;
         weight_shadow <= 8'd0;
-        weight_write_reg <= 1'b0;
         weight_write_out <= 1'b0;
         weight_swap_out <= 1'b0;
     end
@@ -49,8 +47,7 @@ always_ff @(posedge clk) begin
         activation_out <= activation_in;
         partial_sum_out <= partial_sum_in + (activation_in * weight_active);
         weight_out <= weight_in;
-        weight_write_reg <= weight_write_in;
-        weight_write_out <= weight_write_reg;
+        weight_write_out <= weight_write_in;
         weight_swap_out <= weight_swap_in;
     end
 end
