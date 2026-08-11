@@ -40,6 +40,7 @@ logic [31:0] tile_partial_sums_out [0:3][0:7];
 logic [7:0] tile_weights_out [0:3][0:7];
 logic tile_weight_write_out [0:3];
 logic tile_weight_swap_out [0:3];
+logic tile_weight_swap_col0_out [0:3];
 
 // Multiplexing and routing logic for tile inputs and top-level outputs.
 generate
@@ -90,10 +91,10 @@ assign tile_weight_write_in[1] = weight_write[1];
 assign tile_weight_swap_in[1] = cfg_merge_horizontal_top ? tile_weight_swap_out[0] : weight_swap[1];
 
 assign tile_weight_write_in[2] = cfg_merge_vertical_left ? tile_weight_write_out[0] : weight_write[2];
-assign tile_weight_swap_in[2] = cfg_merge_vertical_left ? tile_weight_swap_out[0] : weight_swap[2];
+assign tile_weight_swap_in[2] = cfg_merge_vertical_left ? tile_weight_swap_col0_out[0] : weight_swap[2];
 
 assign tile_weight_write_in[3] = cfg_merge_vertical_right ? tile_weight_write_out[1] : weight_write[3];
-assign tile_weight_swap_in[3] = cfg_merge_horizontal_bottom ? tile_weight_swap_out[2] : (cfg_merge_vertical_right ? tile_weight_swap_out[1] : weight_swap[3]);
+assign tile_weight_swap_in[3] = cfg_merge_horizontal_bottom ? tile_weight_swap_out[2] : (cfg_merge_vertical_right ? tile_weight_swap_col0_out[1] : weight_swap[3]);
 
 assign weight_write_out[0] = tile_weight_write_out[0];
 assign weight_write_out[1] = tile_weight_write_out[1];
@@ -120,6 +121,7 @@ generate
             .weight_swap_in(tile_weight_swap_in[t]),
             .weight_write_out(tile_weight_write_out[t]),
             .weight_swap_out(tile_weight_swap_out[t]),
+            .weight_swap_col0_out(tile_weight_swap_col0_out[t]),
             .partial_sums_in(tile_partial_sums_in[t]),
             .partial_sums_out(tile_partial_sums_out[t])
         );

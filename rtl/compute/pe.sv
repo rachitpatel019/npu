@@ -1,41 +1,51 @@
 // Processing Element (PE) for systolic array matrix multiplication.
-// Implements double-buffered weights with pipelined swap control and fully systolic weight propagation.
-
-// * Could split multiply and accumulate operations across 2 clock cycles to improve Fmax.
+// Implements double-buffered weights with pipelined swap control and shadow register shift chain.
 
 module pe (
-    input logic clk,
-    input logic reset,
-    input logic enable,
+input logic clk,
+input logic reset,
+input logic enable,
 
-    input logic [7:0] activation_in,
-    output logic [7:0] activation_out,
+input logic [7:0] activation_in,
+output logic [7:0] activation_out,
 
-    input logic [31:0] partial_sum_in,
-    output logic [31:0] partial_sum_out,
+input logic [31:0] partial_sum_in,
+output logic [31:0] partial_sum_out,
 
-    input logic [7:0] weight_in,
-    input logic weight_write_in,
-    input logic weight_swap_in,
-    output logic [7:0] weight_out,
-    output logic weight_write_out,
-    output logic weight_swap_out
+input logic [7:0] weight_in,
+input logic weight_write_in,
+input logic weight_swap_in,
+output logic [7:0] weight_out,
+output logic weight_write_out,
+output logic weight_swap_out
 );
 
 // Registers to hold weight data for double buffering.
 logic [7:0] weight_active;
 logic [7:0] weight_shadow;
 
-// Pipelined logic for activation forwarding, partial sum accumulation, and double-buffered weight updates.
+// Pipelined registers for control and data forwarding.
+logic [7:0] activation_reg;
+logic [31:0] partial_sum_reg;
+logic weight_swap_reg;
+
+// Drive combinational weight output from shadow register.
+assign weight_out = weight_shadow;
+
+// Connect registered internal signals to output ports.
+assign activation_out = activation_reg;
+assign partial_sum_out = partial_sum_reg;
+assign weight_write_out = weight_write_in;
+assign weight_swap_out = weight_swap_reg;
+
+// Pipelined control and data updates.
 always_ff @(posedge clk) begin
     if (reset) begin
-        activation_out <= 8'd0;
-        partial_sum_out <= 32'd0;
-        weight_out <= 8'd0;
         weight_active <= 8'd0;
         weight_shadow <= 8'd0;
-        weight_write_out <= 1'b0;
-        weight_swap_out <= 1'b0;
+        activation_reg <= 8'd0;
+        partial_sum_reg <= 32'd0;
+        weight_swap_reg <= 1'b0;
     end
     else if (enable) begin
         if (weight_write_in) begin
@@ -44,11 +54,9 @@ always_ff @(posedge clk) begin
         if (weight_swap_in) begin
             weight_active <= weight_shadow;
         end
-        activation_out <= activation_in;
-        partial_sum_out <= partial_sum_in + (activation_in * weight_active);
-        weight_out <= weight_in;
-        weight_write_out <= weight_write_in;
-        weight_swap_out <= weight_swap_in;
+        activation_reg <= activation_in;
+        partial_sum_reg <= $signed(partial_sum_in) + ($signed(activation_in) * $signed(weight_active));
+        weight_swap_reg <= weight_swap_in;
     end
 end
 
