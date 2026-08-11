@@ -43,8 +43,9 @@ logic tile_weight_swap_out [0:3];
 logic tile_weight_swap_col0_out [0:3];
 
 // Multiplexing and routing logic for tile inputs and top-level outputs.
+genvar i;
 generate
-    for (genvar i = 0; i < 8; i++) begin : routing_gen
+    for (i = 0; i < 8; i++) begin : routing_gen
         // Tile 0 (TL) inputs
         assign tile_activations_in[0][i] = activations_in[i];
         assign tile_partial_sums_in[0][i] = partial_sums_in[i];
@@ -107,8 +108,9 @@ assign weight_swap_out[2] = tile_weight_swap_out[2];
 assign weight_swap_out[3] = tile_weight_swap_out[3];
 
 // Instantiation of the four 8x8 tiles.
+genvar t;
 generate
-    for (genvar t = 0; t < 4; t++) begin : tile_inst_gen
+    for (t = 0; t < 4; t++) begin : tile_inst_gen
         tile tile_inst (
             .clk(clk),
             .reset(reset),

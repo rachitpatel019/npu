@@ -29,8 +29,9 @@ logic weight_swap_wire [0:7][0:8];
 logic weight_swap_col0 [1:7];
 
 // Drive boundary conditions and map array outputs.
+genvar i;
 generate
-    for (genvar i = 0; i < 8; i++) begin : boundary_connections
+    for (i = 0; i < 8; i++) begin : boundary_connections
         assign activation_wire[i][0] = activations_in[i];
         assign partial_sum_wire[0][i] = partial_sums_in[i];
         assign weight_data_wire[0][i] = weights[i];
@@ -66,9 +67,10 @@ always_ff @(posedge clk) begin
 end
 
 // Instantiates the 2D array of processing elements and chains their connections.
+genvar row, col;
 generate
-    for (genvar row = 0; row < 8; row++) begin : tile_row
-        for (genvar col = 0; col < 8; col++) begin : tile_col
+    for (row = 0; row < 8; row++) begin : tile_row
+        for (col = 0; col < 8; col++) begin : tile_col
             pe pe_inst (
                 .clk(clk),
                 .reset(reset),
