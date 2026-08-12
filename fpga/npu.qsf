@@ -49,7 +49,7 @@ set_global_assignment -name MAX_CORE_JUNCTION_TEMP 85
 set_global_assignment -name ERROR_CHECK_FREQUENCY_DIVISOR 256
 set_global_assignment -name POWER_PRESET_COOLING_SOLUTION "23 MM HEAT SINK WITH 200 LFPM AIRFLOW"
 set_global_assignment -name POWER_BOARD_THERMAL_MODEL "NONE (CONSERVATIVE)"
-set_global_assignment -name OPTIMIZATION_MODE "AGGRESSIVE PERFORMANCE"
+set_global_assignment -name OPTIMIZATION_MODE "Aggressive Power"
 set_global_assignment -name SDC_FILE npu.sdc
 set_global_assignment -name SYSTEMVERILOG_FILE ../rtl/compute/tile.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../rtl/compute/systolic_array.sv

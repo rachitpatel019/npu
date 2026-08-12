@@ -11,14 +11,22 @@ logic cfg_merge_horizontal_bottom;
 logic cfg_merge_vertical_left;
 logic cfg_merge_vertical_right;
 
-logic [7:0] activations_in [0:31];
-logic [7:0] activations_out [0:31];
+// ---- DUT Parameters --------------------------------------------------------
+localparam int ACTIVATION_WIDTH = 8;
+localparam int WEIGHT_WIDTH = 8;
+localparam int P_SUM_WIDTH = 32;
+localparam int TILE_ROWS = 8;
+localparam int TILE_COLS = 8;
 
-logic [31:0] partial_sums_in [0:31];
-logic [31:0] partial_sums_out [0:31];
+// ---- DUT Signals -----------------------------------------------------------
+logic [ACTIVATION_WIDTH-1:0] activations_in [0:4*TILE_ROWS-1];
+logic [ACTIVATION_WIDTH-1:0] activations_out [0:4*TILE_ROWS-1];
 
-logic [7:0] weights [0:31];
-logic [7:0] weights_out [0:31];
+logic [P_SUM_WIDTH-1:0] partial_sums_in [0:4*TILE_COLS-1];
+logic [P_SUM_WIDTH-1:0] partial_sums_out [0:4*TILE_COLS-1];
+
+logic [WEIGHT_WIDTH-1:0] weights [0:4*TILE_COLS-1];
+logic [WEIGHT_WIDTH-1:0] weights_out [0:4*TILE_COLS-1];
 
 logic weight_write [0:3];
 logic weight_swap [0:3];
@@ -40,12 +48,19 @@ logic [3:0] r_enable;
 logic [3:0] r_cfg;
 logic [3:0] r_weight_write;
 logic [3:0] r_weight_swap;
-logic [7:0] r_weights [0:31];
-logic [7:0] r_activations_in [0:31];
-logic [31:0] r_partial_sums_in [0:31];
-logic [31:0] exp_val;
+logic [WEIGHT_WIDTH-1:0] r_weights [0:4*TILE_COLS-1];
+logic [ACTIVATION_WIDTH-1:0] r_activations_in [0:4*TILE_ROWS-1];
+logic [P_SUM_WIDTH-1:0] r_partial_sums_in [0:4*TILE_COLS-1];
+logic [P_SUM_WIDTH-1:0] exp_val;
 
-systolic_array dut (
+// ---- DUT Instantiation -----------------------------------------------------
+systolic_array #(
+.ACTIVATION_WIDTH(ACTIVATION_WIDTH),
+.WEIGHT_WIDTH(WEIGHT_WIDTH),
+.P_SUM_WIDTH(P_SUM_WIDTH),
+.TILE_ROWS(TILE_ROWS),
+.TILE_COLS(TILE_COLS)
+) dut (
 .clk(clk),
 .reset(reset),
 .enable(enable),
@@ -99,10 +114,12 @@ weight_swap[1] = 0;
 weight_swap[2] = 0;
 weight_swap[3] = 0;
 
-for (int i = 0; i < 32; i++) begin
-activations_in[i] = 0;
-partial_sums_in[i] = 0;
-weights[i] = 0;
+for (int i = 0; i < 4*TILE_ROWS; i++) begin
+    activations_in[i] = '0;
+end
+for (int i = 0; i < 4*TILE_COLS; i++) begin
+    partial_sums_in[i] = '0;
+    weights[i] = '0;
 end
 
 reset = 0;
@@ -149,17 +166,17 @@ weight_swap[1] = r_weight_swap[1];
 weight_swap[2] = r_weight_swap[2];
 weight_swap[3] = r_weight_swap[3];
 
-for (int i = 0; i < 32; i++) begin
+for (int i = 0; i < 4*TILE_COLS; i++) begin
 status = $fscanf(file, "%h", r_weights[i]);
 weights[i] = r_weights[i];
 end
 
-for (int i = 0; i < 32; i++) begin
+for (int i = 0; i < 4*TILE_ROWS; i++) begin
 status = $fscanf(file, "%h", r_activations_in[i]);
 activations_in[i] = r_activations_in[i];
 end
 
-for (int i = 0; i < 32; i++) begin
+for (int i = 0; i < 4*TILE_COLS; i++) begin
 status = $fscanf(file, "%h", r_partial_sums_in[i]);
 partial_sums_in[i] = r_partial_sums_in[i];
 end

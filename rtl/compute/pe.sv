@@ -1,32 +1,36 @@
 // Processing Element (PE) for systolic array matrix multiplication.
 // Implements double-buffered weights with pipelined swap control and shadow register shift chain.
 
-module pe (
-input logic clk,
-input logic reset,
-input logic enable,
+module pe #(
+    parameter int ACTIVATION_WIDTH,
+    parameter int WEIGHT_WIDTH,
+    parameter int P_SUM_WIDTH
+) (
+    input logic clk,
+    input logic reset,
+    input logic enable,
 
-input logic [7:0] activation_in,
-output logic [7:0] activation_out,
+    input logic [ACTIVATION_WIDTH-1:0] activation_in,
+    output logic [ACTIVATION_WIDTH-1:0] activation_out,
 
-input logic [31:0] partial_sum_in,
-output logic [31:0] partial_sum_out,
+    input logic [P_SUM_WIDTH-1:0] partial_sum_in,
+    output logic [P_SUM_WIDTH-1:0] partial_sum_out,
 
-input logic [7:0] weight_in,
-input logic weight_write_in,
-input logic weight_swap_in,
-output logic [7:0] weight_out,
-output logic weight_write_out,
-output logic weight_swap_out
+    input logic [WEIGHT_WIDTH-1:0] weight_in,
+    input logic weight_write_in,
+    input logic weight_swap_in,
+    output logic [WEIGHT_WIDTH-1:0] weight_out,
+    output logic weight_write_out,
+    output logic weight_swap_out
 );
 
 // Registers to hold weight data for double buffering.
-logic [7:0] weight_active;
-logic [7:0] weight_shadow;
+logic [WEIGHT_WIDTH-1:0] weight_active;
+logic [WEIGHT_WIDTH-1:0] weight_shadow;
 
 // Pipelined registers for control and data forwarding.
-logic [7:0] activation_reg;
-logic [31:0] partial_sum_reg;
+logic [ACTIVATION_WIDTH-1:0] activation_reg;
+logic [P_SUM_WIDTH-1:0] partial_sum_reg;
 logic weight_swap_reg;
 
 // Drive combinational weight output from shadow register.
@@ -41,10 +45,10 @@ assign weight_swap_out = weight_swap_reg;
 // Pipelined control and data updates.
 always_ff @(posedge clk) begin
     if (reset) begin
-        weight_active <= 8'd0;
-        weight_shadow <= 8'd0;
-        activation_reg <= 8'd0;
-        partial_sum_reg <= 32'd0;
+        weight_active <= '0;
+        weight_shadow <= '0;
+        activation_reg <= '0;
+        partial_sum_reg <= '0;
         weight_swap_reg <= 1'b0;
     end
     else if (enable) begin

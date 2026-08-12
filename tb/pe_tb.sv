@@ -23,22 +23,31 @@ logic enable;
 
 always #(CLK_PERIOD / 2) clk = ~clk;
 
+// ---- DUT Parameters --------------------------------------------------------
+localparam int ACTIVATION_WIDTH = 8;
+localparam int WEIGHT_WIDTH = 8;
+localparam int P_SUM_WIDTH = 32;
+
 // ---- DUT Signals -----------------------------------------------------------
-logic [7:0] activation_in;
-logic [7:0] activation_out;
+logic [ACTIVATION_WIDTH-1:0] activation_in;
+logic [ACTIVATION_WIDTH-1:0] activation_out;
 
-logic [31:0] partial_sum_in;
-logic [31:0] partial_sum_out;
+logic [P_SUM_WIDTH-1:0] partial_sum_in;
+logic [P_SUM_WIDTH-1:0] partial_sum_out;
 
-logic [7:0] weight_in;
+logic [WEIGHT_WIDTH-1:0] weight_in;
 logic weight_write_in;
 logic weight_swap_in;
-logic [7:0] weight_out;
+logic [WEIGHT_WIDTH-1:0] weight_out;
 logic weight_write_out;
 logic weight_swap_out;
 
 // ---- DUT Instantiation -----------------------------------------------------
-pe dut (
+pe #(
+.ACTIVATION_WIDTH(ACTIVATION_WIDTH),
+.WEIGHT_WIDTH(WEIGHT_WIDTH),
+.P_SUM_WIDTH(P_SUM_WIDTH)
+) dut (
 .clk(clk),
 .reset(reset),
 .enable(enable),
