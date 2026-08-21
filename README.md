@@ -63,6 +63,16 @@ The complete $16 \times 16$ systolic compute engine has been mapped and fully ti
 
 *Timing model evaluated under worst-case industrial corner: **Slow 1200mV 85°C**.*
 
+### ⏱️ Critical Path Analysis
+
+Static Timing Analysis (STA) on the MAX 10 device identifies the limiting path as the single-cycle Multiply-Accumulate (MAC) cascade between adjacent Processing Elements:
+
+$$\text{PE}_{(r, c-1)}\text{.activation\_reg} \xrightarrow{\text{Inter-PE Wire}} \text{PE}_{(r, c)}\text{.Multiplier (8}\times\text{8)} \xrightarrow{} \text{PE}_{(r, c)}\text{.Adder (32-bit Carry Chain)} \xrightarrow{} \text{PE}_{(r, c)}\text{.partial\_sum\_reg[31]}$$
+
+* **Worst-Case Slack**: **$+0.160\text{ ns}$** at $9.500\text{ ns}$ clock period (Slow 1200mV 85°C).
+* **Limiting Factors**: High DSP block density (88.9% utilization) spreads PEs across multiplier columns, while the combinational 8×8 multiply and 32-bit addition carry chain in [`pe.sv`](rtl/compute/pe.sv#L62) must complete within a single clock cycle.
+* **Automated STA Reporting**: Run `quartus_sta -t fpga/report_critical_paths.tcl npu 20` to inspect the top 20 critical paths.
+
 ---
 
 ## 📂 Repository Structure
@@ -78,6 +88,9 @@ The complete $16 \times 16$ systolic compute engine has been mapped and fully ti
 │   ├── npu.qpf / npu.qsf                  # Quartus project definitions and pin assignments
 │   ├── npu.sdc                            # Synopsys Design Constraints (timing clock setup)
 │   ├── top.sv                             # Pin-constrained FPGA test wrapper with serial I/O
+│   ├── report_critical_paths.tcl          # STA script to extract and report top critical paths
+│   ├── report_critical_paths.sh           # Shell runner for timing analysis
+│   ├── report_critical_paths.ps1          # PowerShell runner for timing analysis
 │   └── output_files/                      # Synthesis, fitting, and TimeQuest STA reports
 ├── rtl/                                   # Synthesizable SystemVerilog RTL source files
 │   ├── compute/
@@ -124,7 +137,7 @@ partial_sum_in ─────────────────────�
 The verification suite combines standard SystemVerilog self-checking testbenches with a cycle-accurate Python golden reference model.
 
 ### 1. Cycle-Accurate Python Model & Co-Simulation
-The Python framework ([`tb/systolic_array_tb.py`](file:///C:/Rachit/RISC_V_SOC/npu/tb/systolic_array_tb.py)) generates stimulus test vectors and validates ModelSim execution logs across all 6 configurations and corner cases (random matrices, zeros, min/max saturation, and tile enable gating):
+The Python framework ([`tb/systolic_array_tb.py`](tb/systolic_array_tb.py)) generates stimulus test vectors and validates ModelSim execution logs across all 6 configurations and corner cases (random matrices, zeros, min/max saturation, and tile enable gating):
 
 ```bash
 # Run verification testbench generator and ModelSim co-simulation

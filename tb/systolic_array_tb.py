@@ -2,18 +2,20 @@
 Systolic Array Verification Framework (RTL Simulation)
 ======================================================
 This framework generates random matrices for all 6 configurations of the reconfigurable
-systolic array across 6 distinct test batches (nominal, zeros, max, min, and gating).
+systolic array across 6 distinct test batches (nominal, zeros, max, min, and gating) using NumPy.
 It runs the cycle-accurate behavioral model in Python to generate cycle-by-cycle
-test vectors (stimulus inputs and expected outputs), and then executes the actual
-SystemVerilog RTL simulation using ModelSim.
+test vectors (stimulus inputs and expected outputs), validates results against NumPy GEMM,
+and executes the SystemVerilog UVM simulation using ModelSim/Questa.
 
-It parses the ModelSim simulation log to verify that the RTL implementation matches the
+It parses the simulation log to verify that the RTL implementation matches the
 expected numerical results.
 """
 
-import random
+import numpy as np
 import subprocess
 import re
+import os
+import shutil
 
 # Helper functions for signed integer wrap-around
 def to_signed_8(val):
@@ -23,6 +25,15 @@ def to_signed_8(val):
 def to_signed_32(val):
     """Wrap integer to 32-bit signed range [-2**31, 2**31 - 1]"""
     return (int(val) + 2**31) % 2**32 - 2**31
+
+
+def compute_gemm_golden(A, B, D):
+    """Compute golden GEMM C = A * B + D using NumPy with 64-bit precision to prevent overflow"""
+    A_mat = np.array(A, dtype=np.int64)
+    B_mat = np.array(B, dtype=np.int64)
+    D_mat = np.array(D, dtype=np.int64)
+    C_mat = np.matmul(A_mat, B_mat) + D_mat
+    return C_mat
 
 
 class SystolicArrayState:
@@ -62,14 +73,12 @@ class SystolicArraySimulator:
 
         next_state = SystolicArrayState()
 
-        # Extract outputs from the previous state (before the rising clock edge)
         prev_tile_act_out = [[self.state.tile_activation_out[t][r][7] for r in range(8)] for t in range(4)]
         prev_tile_psum_out = [[self.state.tile_partial_sum_out[t][7][c] for c in range(8)] for t in range(4)]
         prev_tile_w_out = [[self.state.tile_weight_shadow[t][7][c] for c in range(8)] for t in range(4)]
         prev_tile_swap_out = [self.state.tile_weight_swap_out[t][0][7] for t in range(4)]
         prev_tile_swap_col0_out = [self.state.tile_weight_swap_col0_out[t] for t in range(4)]
 
-        # Compute Tile inputs using routing logic equations from systolic_array.sv
         tile_activations_in = [[0] * 8 for _ in range(4)]
         tile_partial_sums_in = [[0] * 8 for _ in range(4)]
         tile_weights = [[0] * 8 for _ in range(4)]
@@ -162,7 +171,6 @@ class SystolicArraySimulator:
         self.state = next_state
         self.cycle += 1
 
-        # Compute top-level outputs
         activations_out = [0] * 32
         partial_sums_out = [0] * 32
         weights_out = [0] * 32
@@ -393,49 +401,49 @@ CONFIGURATIONS = {
     }
 }
 
-# Verification Test Batches designed to cover nominal, extremes, zeros, and enables gating
+# Verification Test Batches designed using NumPy matrix generation
 TEST_BATCHES = [
     {
         'name': "Nominal Random",
-        'gen_A': lambda H, M: [[random.randint(-64, 63) for _ in range(H)] for _ in range(M)],
-        'gen_B': lambda H, W: [[random.randint(-64, 63) for _ in range(W)] for _ in range(H)],
-        'gen_D': lambda W, M: [[random.randint(-100, 100) for _ in range(W)] for _ in range(M)],
+        'gen_A': lambda H, M: np.random.randint(-64, 64, size=(M, H), dtype=np.int32).tolist(),
+        'gen_B': lambda H, W: np.random.randint(-64, 64, size=(H, W), dtype=np.int32).tolist(),
+        'gen_D': lambda W, M: np.random.randint(-100, 101, size=(M, W), dtype=np.int32).tolist(),
         'enable': [1, 1, 1, 1]
     },
     {
         'name': "All Zeros",
-        'gen_A': lambda H, M: [[0 for _ in range(H)] for _ in range(M)],
-        'gen_B': lambda H, W: [[0 for _ in range(W)] for _ in range(H)],
-        'gen_D': lambda W, M: [[0 for _ in range(W)] for _ in range(M)],
+        'gen_A': lambda H, M: np.zeros((M, H), dtype=np.int32).tolist(),
+        'gen_B': lambda H, W: np.zeros((H, W), dtype=np.int32).tolist(),
+        'gen_D': lambda W, M: np.zeros((M, W), dtype=np.int32).tolist(),
         'enable': [1, 1, 1, 1]
     },
     {
         'name': "Extreme Max (127)",
-        'gen_A': lambda H, M: [[127 for _ in range(H)] for _ in range(M)],
-        'gen_B': lambda H, W: [[127 for _ in range(W)] for _ in range(H)],
-        'gen_D': lambda W, M: [[500 for _ in range(W)] for _ in range(M)],
+        'gen_A': lambda H, M: np.full((M, H), 127, dtype=np.int32).tolist(),
+        'gen_B': lambda H, W: np.full((H, W), 127, dtype=np.int32).tolist(),
+        'gen_D': lambda W, M: np.full((M, W), 500, dtype=np.int32).tolist(),
         'enable': [1, 1, 1, 1]
     },
     {
         'name': "Extreme Min (-128)",
-        'gen_A': lambda H, M: [[-128 for _ in range(H)] for _ in range(M)],
-        'gen_B': lambda H, W: [[-128 for _ in range(W)] for _ in range(H)],
-        'gen_D': lambda W, M: [[-500 for _ in range(W)] for _ in range(M)],
+        'gen_A': lambda H, M: np.full((M, H), -128, dtype=np.int32).tolist(),
+        'gen_B': lambda H, W: np.full((H, W), -128, dtype=np.int32).tolist(),
+        'gen_D': lambda W, M: np.full((M, W), -500, dtype=np.int32).tolist(),
         'enable': [1, 1, 1, 1]
     },
     {
         'name': "Gating (TL & BL enabled, TR & BR disabled)",
-        'gen_A': lambda H, M: [[random.randint(-64, 63) for _ in range(H)] for _ in range(M)],
-        'gen_B': lambda H, W: [[random.randint(-64, 63) for _ in range(W)] for _ in range(H)],
-        'gen_D': lambda W, M: [[random.randint(-100, 100) for _ in range(W)] for _ in range(M)],
-        'enable': [1, 0, 1, 0]  # Gating TR and BR
+        'gen_A': lambda H, M: np.random.randint(-64, 64, size=(M, H), dtype=np.int32).tolist(),
+        'gen_B': lambda H, W: np.random.randint(-64, 64, size=(H, W), dtype=np.int32).tolist(),
+        'gen_D': lambda W, M: np.random.randint(-100, 101, size=(M, W), dtype=np.int32).tolist(),
+        'enable': [1, 0, 1, 0]
     },
     {
         'name': "Gating (TL & TR enabled, BL & BR disabled)",
-        'gen_A': lambda H, M: [[random.randint(-64, 63) for _ in range(H)] for _ in range(M)],
-        'gen_B': lambda H, W: [[random.randint(-64, 63) for _ in range(W)] for _ in range(H)],
-        'gen_D': lambda W, M: [[random.randint(-100, 100) for _ in range(W)] for _ in range(M)],
-        'enable': [1, 1, 0, 0]  # Gating BL and BR
+        'gen_A': lambda H, M: np.random.randint(-64, 64, size=(M, H), dtype=np.int32).tolist(),
+        'gen_B': lambda H, W: np.random.randint(-64, 64, size=(H, W), dtype=np.int32).tolist(),
+        'gen_D': lambda W, M: np.random.randint(-100, 101, size=(M, W), dtype=np.int32).tolist(),
+        'enable': [1, 1, 0, 0]
     }
 ]
 
@@ -465,7 +473,7 @@ def format_stimulus_line(reset_val, enable_list, cfg_dict, write_list, swap_list
 
 
 def generate_stimulus_data():
-    """Simulate all 6 configurations across 6 batches to generate test vectors"""
+    """Simulate all 6 configurations across 6 batches to generate test vectors verified with NumPy GEMM"""
     inputs_f = open("tb/stimulus_inputs.txt", "w")
     expected_f = open("tb/stimulus_expected.txt", "w")
 
@@ -487,7 +495,6 @@ def generate_stimulus_data():
             sim.reset()
             enable = batch['enable']
 
-            # Generate matrices for this batch
             grids_data = []
             h_max = 0
             w_max = 0
@@ -503,11 +510,15 @@ def generate_stimulus_data():
                 A = batch['gen_A'](H, m_val)
                 D = batch['gen_D'](W, m_val)
                 
+                # Verify mathematical consistency using NumPy GEMM
+                C_golden = compute_gemm_golden(A, B, D)
+                
                 grids_data.append({
                     'grid': grid,
                     'A': A,
                     'B': B,
-                    'D': D
+                    'D': D,
+                    'C_golden': C_golden
                 })
 
             # 1. Reset Phase (5 cycles)
@@ -619,6 +630,7 @@ def generate_stimulus_data():
                     grid = data['grid']
                     H = grid['H']
                     W = grid['W']
+                    C_golden = data['C_golden']
 
                     for i in range(m_val):
                         for c in range(W):
@@ -626,33 +638,62 @@ def generate_stimulus_data():
                             if cycle_idx == expected_cycle:
                                 port_idx = grid['col_outputs'][c]
                                 val = psum_out[port_idx]
+                                
+                                # Validate against NumPy GEMM if all relevant tiles are enabled
+                                if all(enable):
+                                    gold_val = to_signed_32(int(C_golden[i, c]))
+                                    assert val == gold_val, f"Mismatch with NumPy GEMM at row {i}, col {c}: sim={val}, numpy={gold_val}"
+                                
                                 expected_f.write(f"{global_cycle} {port_idx} {val & 0xFFFFFFFF:08X}\n")
 
                 global_cycle += 1
 
     inputs_f.close()
     expected_f.close()
-    print("Test vectors successfully generated.")
+    print("Test vectors successfully generated and verified against NumPy GEMM.")
 
 
 def run_modelsim_simulation():
-    """Compile and run the SystemVerilog simulation in ModelSim"""
+    """Compile and run the SystemVerilog UVM simulation in ModelSim/Questa"""
     print("\n--------------------------------------------------")
-    print("LAUNCHING MODELSIM SIMULATION")
+    print("LAUNCHING MODELSIM UVM SIMULATION")
     print("--------------------------------------------------")
 
     # 1. Create work library in tb/
     print("Creating work library in tb/...")
     res = subprocess.run(["vlib", "tb/work"], capture_output=True, text=True)
-    if res.returncode != 0:
+    if res.returncode != 0 and "already exists" not in res.stderr:
         print("Error executing vlib tb/work:")
         print(res.stderr)
         return False
 
-    # 2. Compile SystemVerilog RTL and testbench into tb/work
-    print("Compiling RTL & Testbench files...")
+    # Find UVM src directory in ModelSim installation
+    uvm_inc_dir = "C:/intelFPGA/20.1/modelsim_ase/verilog_src/uvm-1.2/src"
+    uvm_pkg_file = "C:/intelFPGA/20.1/modelsim_ase/verilog_src/uvm-1.2/src/uvm_pkg.sv"
+    
+    try:
+        vlog_loc = subprocess.run(
+            ["powershell", "-Command", "Get-Command vlog | Select-Object -ExpandProperty Source"],
+            capture_output=True,
+            text=True
+        ).stdout.strip()
+        if vlog_loc and os.path.exists(vlog_loc):
+            base_dir = os.path.dirname(os.path.dirname(vlog_loc))
+            cand_inc = os.path.join(base_dir, "verilog_src", "uvm-1.2", "src")
+            cand_pkg = os.path.join(cand_inc, "uvm_pkg.sv")
+            if os.path.exists(cand_pkg):
+                uvm_inc_dir = cand_inc.replace("\\", "/")
+                uvm_pkg_file = cand_pkg.replace("\\", "/")
+    except Exception:
+        pass
+
+    # 2. Compile SystemVerilog RTL and UVM testbench into tb/work
+    print("Compiling RTL & UVM Testbench files...")
     compile_cmd = [
-        "vlog", "-work", "tb/work",
+        "vlog", "-sv", "-work", "tb/work",
+        "+define+UVM_NO_DPI",
+        f"+incdir+{uvm_inc_dir}",
+        uvm_pkg_file,
         "rtl/compute/pe.sv",
         "rtl/compute/tile.sv",
         "rtl/compute/systolic_array.sv",
@@ -667,7 +708,7 @@ def run_modelsim_simulation():
     print("Compilation successful.")
 
     # 3. Execute vsim with log file set to tb/transcript
-    print("Running simulation...")
+    print("Running UVM simulation...")
     sim_cmd = [
         "vsim", "-c", "-l", "tb/transcript", "-do", "run -all; quit -f", "tb/work.systolic_array_tb"
     ]
@@ -678,13 +719,13 @@ def run_modelsim_simulation():
     print(log)
     print("------------------------------\n")
 
-    # Scan log for error patterns
-    if "Verification Complete:" in log:
+    # Scan log for verification results
+    if "Verification Complete:" in log or "UVM_ERROR :    0" in log:
         match = re.search(r"Passes = (\d+), Mismatches = (\d+)", log)
         if match:
             passes = int(match.group(1))
             mismatches = int(match.group(2))
-            print(f"ModelSim RTL Verification Summary:")
+            print(f"ModelSim UVM Verification Summary:")
             print(f"  - Total output values checked: {passes + mismatches}")
             print(f"  - Passed checks: {passes}")
             print(f"  - Mismatched checks: {mismatches}")
@@ -701,8 +742,6 @@ def run_modelsim_simulation():
 
 def cleanup_files():
     """Deletes intermediate stimulus files and ModelSim output folders if verification succeeds"""
-    import os
-    import shutil
     print("\nCleaning up generated simulation files and folders...")
     files_to_delete = [
         "tb/stimulus_inputs.txt",
@@ -731,7 +770,7 @@ def cleanup_files():
 
 
 if __name__ == "__main__":
-    random.seed(42)
+    np.random.seed(42)
     generate_stimulus_data()
     success = run_modelsim_simulation()
     if success:
